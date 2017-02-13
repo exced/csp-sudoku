@@ -8,6 +8,7 @@
 *.o
 *.dot
 *.ps
+sudoku
 
 # compiled output
 /dist

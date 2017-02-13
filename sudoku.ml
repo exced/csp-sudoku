@@ -28,7 +28,21 @@ let nodes =
     Array.init 9 (fun i -> Array.init 9 (new_node i))
 ;;
 
-let node i j = nodes.(i).(j);; (* shortcut for easier access *)
+(* shortcuts for easier access *)
+let node i j = nodes.(i).(j);;
+let getDomain n = (G.V.label n).d;;
+let getDomain i j = (G.V.label (node i j)).d;;
+
+(* remove element e from list l and returns l *)
+let listRemoveElement e l = List.filter (fun x -> x <> e) l;; 
+
+(* set domain and apply constraints on other concerned nodes *)
+let setDomain n d () = 
+    (G.V.label n).d <- d;
+    match d with
+    | [a] -> G.iter_succ (fun vt -> (G.V.label vt).d <- listRemoveElement a (G.V.label vt).d;) g n;
+    | _ -> ();
+;;
 
 (* We read the initial constraints from standard input *)
 let createFromStdin () =
@@ -36,8 +50,7 @@ let createFromStdin () =
         let s = read_line () in
         for j = 0 to 8 do 
             match s.[j] with
-            | '1'..'9' as ch -> 
-                G.Mark.set (node i j) (Char.code ch - Char.code '0');
+            | '1'..'9' as ch -> (G.V.label (node i j)).d <- [(Char.code ch - Char.code '0')];
             | _ -> ()
         done
     done
@@ -62,29 +75,42 @@ let initConstraints () =
             done
         done 
     done    
-;;    
+;;
+
+let applyInitConstraints () =
+    G.iter_vertex (fun vt -> setDomain vt (G.V.label vt).d ();) g;
+;;        
 
 (* Displaying the current state of the graph *)
 let display () =
     for i = 0 to 8 do
-        for j = 0 to 8 do 
-            printf "%d" (G.Mark.get (node i j)) done;
+        for j = 0 to 8 do
+            let s =
+            match (G.V.label (node i j)).d with
+            | [a] -> string_of_int a
+            | _ -> "."
+            in
+            printf "%s" s done;
         printf "\n";
     done
 ;;
 
-(* Display the current domains of the graph *)
-let displayDomain { x = x; y = y; d = d } () = List.map (fun v -> Format.printf "%d, " v) d;;
+(* Display *)
+let displayDomain { x = x; y = y; d = d } () = List.map (fun v -> printf "%d, " v) d;;
+let displayVertex { x = x; y = y; d = d } () = printf "x: %d, y: %d, " x y; displayDomain { x = x; y = y; d = d } ();;
+let displayVertexes () = G.iter_vertex (fun vt -> displayVertex (G.V.label vt) (); printf "\n";) g;;
+let displayEdge v () = G.iter_succ (fun v2 -> displayVertex (G.V.label v) (); printf "-"; displayVertex (G.V.label v2) (); printf "\n";) g v;;
+let displayEdges () = G.iter_edges (fun v1 v2 -> displayVertex (G.V.label v1) (); printf "-"; displayVertex (G.V.label v2) (); printf "\n";) g;;
 let displayDomains () =
     for i = 0 to 8 do
-        printf "[";
-        for j = 0 to 8 do 
-            printf "\n";
+        for j = 0 to 8 do
+            printf "---- i: %d, j: %d ------\n" i j;
+            printf "["; 
             displayDomain (G.V.label (node i j)) ();
+            printf "]\n";
         done;
-        printf "]\n";
     done
-;;        
+;;       
 
 (*
  * ac3
@@ -106,13 +132,16 @@ let rmInconsistentValues xi xj =
  let solveFromStdin () =
     createFromStdin ();
     initConstraints ();
+    applyInitConstraints ();
     display ()
 ;;    
 
 
 solveFromStdin ();;
 
-(* displayDomains ();; *)
+displayDomains ();;
+
+displayEdge (node 0 0) ();;
 
 
 (*
