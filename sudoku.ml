@@ -80,9 +80,6 @@ let initConstraints () =
     done    
 ;;     
 
-let rec invalid ?(i=0) x y n =
-i<9 && ( (G.Mark.get (node y i)) = n || (G.Mark.get (node i x)) = n || (G.Mark.get (node (y/3*3 + i/3) (x/3*3 + i mod 3))) = n || invalid ~i:(i+1) x y n )
-
 (*
  * Constraints: is n value invalid ? check line, row and unit.
 *) 
@@ -95,7 +92,7 @@ let rec valid ?(i=0) n value =
  * isValid in given assignments ?
  *)
 let isConsistent v l = 
-    List.fold_right (fun vt vq -> (valid vt v) && vq) l true
+    List.fold_right (fun vt vq -> (valid vt vq) && vq) l true
 ;; 
 
 (* is t include in l ? *)
@@ -156,9 +153,15 @@ let orderDomainLeastConstraining n =
     (if (nbConstraints a n) < (nbConstraints b n) then 1 else 0)) ((G.V.label n).d)
 ;;    
 
-(* high level fold func : iterates until (l = u) *)
+(* high level fold func : iterates until (l = u) 
 let rec fold f accu l u = if (l = u) then accu else fold f (f accu l) (l+1) u;;
 
+let rec invalid ?(i=0) x y n =
+i<9 && ( (G.Mark.get (node y i)) = n || (G.Mark.get (node i x)) = n || (G.Mark.get (node (y/3*3 + i/3) (x/3*3 + i mod 3))) = n || invalid ~i:(i+1) x y n )
+
+
+ * simple backtrack : iterate through the grid by rows and columns. No heuristic
+ *)
 (* 
 let rec search ?(x=0) ?(y=0) f accu = match x, y with
     9, y -> search ~x:0 ~y:(y+1) f accu (* Next row *)
@@ -175,21 +178,26 @@ let rec search ?(x=0) ?(y=0) f accu = match x, y with
 
 (*
  * Backtracking solver
+ * remaining assigments to do
+ * assigments already done
  * @param g = csp
  *)
-let rec backtrack f accu =
-    if (List.length l >= 81) then l else
-        let var = selectVarStrategy ((selectUnassigned l) []) in
-        List.iter (fun value -> 
-        if (isConsistent value l) then
-            
-            try (back_rec (l@[var])) with            
-            | Fail -> (listRemoveElement var l) 
-            | Found -> l
-            | _ -> (l@[var])
-        ) (orderDomainLeastConstraining var);
-    in back_rec ((getAssigned g) []) ;;
-;;    
+ (*
+let rec backtrack f todo done =
+    match todo with (* vertexes to assign *)
+    | [] -> f done
+    | l -> let var = selectVarStrategy todo in 
+        List.fold_right (fun vh vt -> (* ordered values of domain *)
+            if (isConsistent vh done) then
+                (G.Mark.set var vh;
+                let done = backtrack f (listRemoveElement var todo) done in
+                G.Mark.set var 0;
+                done))
+            else
+                done
+        ) (orderDomainLeastConstraining h) done 
+;; 
+*)  
 
 (* Displaying the current state of the graph *)
 let display () =
@@ -206,8 +214,11 @@ let display () =
     initConstraints ();
     applyInitConstraints ();
     display (); 
+    (*
+    printf "\n %d solutions :\n" (backtrack (fun i -> display(); i+1) ((getUnassigned g) []) ((getAssigned g) [])
+    *)
     (* 
-    printf "%d solutions\n" (search (fun i -> display(); i+1) 0)
+    printf "\n %d solutions :\n" (search (fun i -> display(); i+1) 0)
     *)
 ;;    
 solveFromStdin ();;
