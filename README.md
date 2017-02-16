@@ -11,9 +11,20 @@ To compile :
 make
 ```
 
-To run with a sudoku :
+To run with your own sudoku :
 ```bash
-./sudoku <example
+cat >mySudoku
+000070000
+001284900
+092301670
+370060094
+000000000
+520040036
+003402700
+200896001
+040030020
+
+./sudoku <mySudoku
 ```
 
 ## Work with Ocaml
