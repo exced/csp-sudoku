@@ -28,17 +28,17 @@ cat >mySudoku
 ```
 
 ## Use Docker to work with Ocaml and its graph dependency
-'''bash
+```bash
 make docker-run 
 or
 docker run ocaml/opam:ubuntu-14.04_ocaml-4.02.3 opam depext -i ocamlgraph
-'''
+```
 
 ## Ocaml graph library
 [Link for documentation and download](http://ocamlgraph.lri.fr)
 
 Install :
-'''bash
+```bash
 wget http://ocamlgraph.lri.fr/download/ocamlgraph-1.8.7.tar.gz
 tar xvzf ocamlgraph-1.8.7.tar.gz
 rm ocamlgraph-1.8.7.tar.gz
@@ -46,7 +46,7 @@ cd ocamlgraph-1.8.7/
 ./configure
 make
 make install
-'''
+```
 
 ## Work with Ocaml
 To run the interpretor :
