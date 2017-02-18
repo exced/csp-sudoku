@@ -29,19 +29,10 @@ let nodes =
 let node i j = nodes.(i).(j);;
 
 (* remove element e from list l and returns l *)
-let listRemoveElement e l = List.filter (fun x -> x <> e) l;; 
+let listRemoveElement e l = List.filter (fun x -> x <> e) l;;     
 
-(* AC-3 constraints propagation *)
-let setDomain n value () =
-    (G.V.label n).d <- [value];
-    if (value = 0) then
-        G.iter_succ (fun vt -> (G.V.label vt).d <- value::(G.V.label vt).d;) g n
-    else
-        G.iter_succ (fun vt -> (G.V.label vt).d <- listRemoveElement value (G.V.label vt).d;) g n
-;;    
-
+(* apply constraints on other concerned nodes - AC-3 *)
 let applyInitConstraints () =
-    (* apply constraints on other concerned nodes *)
     let applyConstraints n () = 
         match (G.V.label n).d with
         | [a] -> G.iter_succ (fun vt -> (G.V.label vt).d <- listRemoveElement a (G.V.label vt).d;) g n;
@@ -106,7 +97,9 @@ let getUnassigned g = G.fold_vertex (fun vt q -> if (G.Mark.get vt = 0) then vt:
 (* minimum remaining values + degree heuristic strategy between 2 vertexes *)
 let selectStrategy v1 v2 =
     if (List.length (G.V.label v1).d) = (List.length (G.V.label v2).d) then
-        let nbAdjCons v = List.fold_right (fun vt q -> List.length (G.V.label vt).d + q) (G.succ g v) 0 in
+        let nbAdjCons v = List.fold_right (fun vt q -> 
+            if (varInclude (G.Mark.get v) (G.V.label vt).d) then 1 + q else q
+        ) (G.succ g v) 0 in
         if ((nbAdjCons v1) <= (nbAdjCons v2)) then v1 else v2
     else if (List.length (G.V.label v1).d) < (List.length (G.V.label v2).d) then v1
     else v2
@@ -123,13 +116,14 @@ let nbConstraints a n = List.fold_right (fun vt q ->
     let d = (G.V.label vt).d in
     match d with
     | [x] -> q
-    | _ ->
-        if (varInclude a d) then 1 + q else q) (G.succ g n) 0;; 
+    | _ -> if (varInclude a d) then 1 + q else q) (G.succ g n) 0
+;; 
 
 (* least constraining value *)
 let orderDomainLeastConstraining n =
-    List.sort (fun a b -> if ((nbConstraints a n) > (nbConstraints b n)) then -1 else
-    (if (nbConstraints a n) < (nbConstraints b n) then 1 else 0)) ((G.V.label n).d)
+    List.sort (fun a b -> let nb_a = (nbConstraints a n) in let nb_b = (nbConstraints b n) in
+        if (nb_a < nb_b) then -1 else
+    (if (nb_a = nb_b) then 0 else 1)) ((G.V.label n).d)
 ;;    
 
 let rec invalid ?(i=0) x y n = 
@@ -153,7 +147,8 @@ match ltodo with
                 (G.Mark.set h n;
                 backtrack0 t;
                 G.Mark.set h 0;
-        )) domain;;
+        )) domain
+;;
 
 (*
  * Backtracking solver using MRV + degree heuristic + leastconstraingvalue + AC-3
@@ -162,17 +157,15 @@ match ltodo with
 let rec backtrack1 ltodo = 
 match ltodo with
     | [] -> display (); (* Found a solution *)
-    | _ ->
-        let h = selectVarStrategy ltodo in
-        List.iter (fun n ->
+    | h::t -> let h = selectVarStrategy ltodo in
+        List.iter (fun value ->
             i := (!i + 1); (* test number *)
-            if (not (invalid (G.V.label h).x (G.V.label h).y n)) then
-                (G.Mark.set h n;
-                setDomain h n ();
+            if (not (invalid (G.V.label h).x (G.V.label h).y value)) then
+                (G.Mark.set h value;
                 backtrack1 (listRemoveElement h ltodo);
                 G.Mark.set h 0;
-                setDomain h 0 ();
-        )) (orderDomainLeastConstraining h);;    
+        )) (orderDomainLeastConstraining h)
+;;
 
 let solveFromStdin () =
     createFromStdin ();

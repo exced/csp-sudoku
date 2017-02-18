@@ -12,6 +12,9 @@ run:
 runtime:
 	time ./sudoku <example 		
 
+docker-run:	
+	docker run ocaml/opam:ubuntu-14.04_ocaml-4.02.3 opam depext -i ocamlgraph
+
 clean:
 	rm -f sudoku.cmi
 	rm -f sudoku.cmx
