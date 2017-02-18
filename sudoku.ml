@@ -1,6 +1,8 @@
 open Graph.Pack.Graph;;
 open Format;;
 
+exception Found;;
+
 (*set of legal values for a vertex *)
 let domain = [1;2;3;4;5;6;7;8;9];;
 
@@ -28,6 +30,11 @@ let nodes =
 (* shortcuts for easier access *)
 let node i j = nodes.(i).(j);;
 
+(* Constraints : one value by unit, grid and row *)
+let rec invalid ?(i=0) x y n = 
+    i<9 && ( (G.Mark.get (node x i)) = n || (G.Mark.get (node i y)) = n || (G.Mark.get (node (x/3*3 + i/3) (y/3*3 + i mod 3))) = n || invalid ~i:(i+1) x y n )   
+;;
+
 (* remove element e from list l and returns l *)
 let listRemoveElement e l = List.filter (fun x -> x <> e) l;;     
 
@@ -48,8 +55,10 @@ let createFromStdin () =
         for j = 0 to 8 do 
             match s.[j] with
             | '1'..'9' as ch -> 
-                (G.V.label (node i j)).d <- [(Char.code ch - Char.code '0')];
-                G.Mark.set (node i j) (Char.code ch - Char.code '0');
+                let value = (Char.code ch - Char.code '0') in
+                if (invalid i j value) then failwith "invalid grid" else
+                    (G.V.label (node i j)).d <- [value];
+                    G.Mark.set (node i j) value;
             | _ -> ()
         done
     done
@@ -126,10 +135,6 @@ let orderDomainLeastConstraining n =
     (if (nb_a = nb_b) then 0 else 1)) ((G.V.label n).d)
 ;;    
 
-let rec invalid ?(i=0) x y n = 
-    i<9 && ( (G.Mark.get (node x i)) = n || (G.Mark.get (node i y)) = n || (G.Mark.get (node (x/3*3 + i/3) (y/3*3 + i mod 3))) = n || invalid ~i:(i+1) x y n )   
-;;
-
 (* number of test *)
 let i = ref 0;;    
 
@@ -156,7 +161,7 @@ match ltodo with
  *)
 let rec backtrack1 ltodo = 
 match ltodo with
-    | [] -> display (); (* Found a solution *)
+    | [] -> raise Found; (* Found a solution *)
     | h::t -> let h = selectVarStrategy ltodo in
         List.iter (fun value ->
             i := (!i + 1); (* test number *)
@@ -171,8 +176,10 @@ let solveFromStdin () =
     createFromStdin ();
     initConstraints ();
     applyInitConstraints ();
-    backtrack1 ((getUnassigned g) []);
-    printf "Done in %d iter \n" (!i);
+    try
+        backtrack1 ((getUnassigned g) []);
+    with
+    | Found -> display (); printf "\nDone in %d iter \n" (!i);
 ;;    
 solveFromStdin ();;
 
