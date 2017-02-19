@@ -144,7 +144,7 @@ let i = ref 0;;
  *)
 let rec backtrack0 ltodo = 
 match ltodo with
-    | [] -> display (); (* Found a solution *)
+    | [] -> raise Found; (* Found a solution *)
     | h::t ->
         List.iter (fun n ->
             i := (!i + 1); (* test number *)
@@ -162,7 +162,7 @@ match ltodo with
 let rec backtrack1 ltodo = 
 match ltodo with
     | [] -> raise Found; (* Found a solution *)
-    | h::t -> let h = selectVarStrategy ltodo in
+    | _ -> let h = selectVarStrategy ltodo in
         List.iter (fun value ->
             i := (!i + 1); (* test number *)
             if (not (invalid (G.V.label h).x (G.V.label h).y value)) then
@@ -176,12 +176,21 @@ let solveFromStdin () =
     createFromStdin ();
     initConstraints ();
     applyInitConstraints ();
+;;
+let main () =    
     try
-        backtrack1 ((getUnassigned g) []);
+        solveFromStdin ();
+        if (Array.length Sys.argv >= 2) then (
+            if (Sys.argv.(1) = "1") then (
+                printf "Backtrack with pick strategies:\n";
+                backtrack1 ((getUnassigned g) []))
+            else if (Sys.argv.(1) = "0") then (
+                printf "Simple Backtrack with Constraint domain reduction:\n";
+                backtrack0 ((getUnassigned g) [])))   
     with
     | Found -> display (); printf "\nDone in %d iter \n" (!i);
-;;    
-solveFromStdin ();;
+;;
+main ();; 
 
 
 
