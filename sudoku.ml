@@ -1,4 +1,4 @@
-open Graph.Pack.Graph;;
+open Graph;;
 open Format;;
 
 exception Found;;
@@ -36,17 +36,50 @@ let rec invalid ?(i=0) x y n =
 ;;
 
 (* remove element e from list l and returns l *)
-let listRemoveElement e l = List.filter (fun x -> x <> e) l;;     
+let listRemoveElement e l = List.filter (fun x -> x <> e) l;;
 
-(* apply constraints on other concerned nodes - AC-3 *)
-let applyInitConstraints () =
-    let applyConstraints n () = 
-        match (G.V.label n).d with
-        | [a] -> G.iter_succ (fun vt -> (G.V.label vt).d <- listRemoveElement a (G.V.label vt).d;) g n;
-        | _ -> ();
-    in    
-    G.iter_vertex (fun vt -> applyConstraints vt ();) g;
-;;   
+(* remove assigned variables *)
+let removeAssigned l = List.filter (fun x -> (G.Mark.get x) = 0) l;;
+
+(* set the mark for the nodes which have singleton domain *)
+let markSingletons ltodo () = List.iter (fun vt ->
+    match (G.V.label vt).d with
+       | [a] -> G.Mark.set vt a;
+       | _ -> ()
+    ) ltodo
+;;
+
+(* apply constraints on successor nodes *)
+let applyConstraintsSucc n () = 
+    G.iter_succ (fun vt -> 
+        let d = (G.V.label vt).d in
+        if (List.length d = 1) then
+            (G.Mark.set vt (List.hd d);)
+        else ( if (List.length d >= 2) then
+            ((G.V.label vt).d <- listRemoveElement (G.Mark.get n) d;)
+        )
+    ) g n;
+;;
+
+let applyInitConstraints () = G.iter_vertex (fun vt -> applyConstraintsSucc vt ();) g;
+;;
+
+(* apply constraints on listed nodes *)
+let applyConstraints n ltodo =
+    List.iter (fun vt ->
+    if (List.length (G.V.label vt).d >= 2) then
+        if ( (G.V.label n).x = (G.V.label vt).x || (G.V.label n).y = (G.V.label vt).y || ((G.V.label n).x/3*3 = (G.V.label vt).x/3*3 && (G.V.label n).y/3*3 = (G.V.label vt).y/3*3) ) then
+             (G.V.label vt).d <- listRemoveElement (G.Mark.get n) (G.V.label vt).d;
+    ) ltodo
+;;
+
+(* release constraints on listed nodes *)
+let releaseConstraints n ltodo =
+    List.iter (fun vt ->
+        if ( (G.V.label n).x = (G.V.label vt).x || (G.V.label n).y = (G.V.label vt).y || ((G.V.label n).x/3*3 = (G.V.label vt).x/3*3 && (G.V.label n).y/3*3 = (G.V.label vt).y/3*3) ) then
+            (G.V.label vt).d <- (G.V.label vt).d@[(G.Mark.get n)];
+    ) ltodo
+;;
 
 (* We read the initial constraints from standard input *)
 let createFromStdin () =
@@ -67,7 +100,7 @@ let createFromStdin () =
 (* We add the 810 constraint edges: 
    two nodes are connected whenever they can't have the same value,
    i.e. they belong to the same line, the same column or the same 3x3 group *)
-let initConstraints () =
+let initGraph () =
     for i = 0 to 8 do
         for j = 0 to 8 do
             for k = 0 to 8 do
@@ -121,18 +154,19 @@ let selectVarStrategy l =
     | h::t -> List.fold_left (fun hs ts -> selectStrategy hs ts) h l
 ;; 
 
-let nbConstraints a n = List.fold_right (fun vt q ->
-    let d = (G.V.label vt).d in
-    match d with
-    | [x] -> q
-    | _ -> if (varInclude a d) then 1 + q else q) (G.succ g n) 0
-;; 
-
 (* least constraining value *)
-let orderDomainLeastConstraining n =
+let orderDomainLeastConstraining n ltodo =
+    let nbConstraints a n = List.fold_right (fun vt q ->
+        if (((G.V.label vt).x = (G.V.label n).x) || ((G.V.label vt).y = (G.V.label n).y)) then
+            (let d = (G.V.label vt).d in
+            match d with
+            | [x] -> q
+            | _ -> if (varInclude a d) then 1 + q else q)
+        else 0)            
+        ltodo 0
+    in        
     List.sort (fun a b -> let nb_a = (nbConstraints a n) in let nb_b = (nbConstraints b n) in
-        if (nb_a < nb_b) then -1 else
-    (if (nb_a = nb_b) then 0 else 1)) ((G.V.label n).d)
+    if (nb_a < nb_b) then -1 else (if (nb_a = nb_b) then 0 else 1)) ((G.V.label n).d)
 ;;    
 
 (* number of test *)
@@ -154,10 +188,29 @@ match ltodo with
                 G.Mark.set h 0;
         )) domain
 ;;
+(*
+let printIntList l = List.map (fun v -> printf "%d , " v;) l;;
+let displayDomain { x = x; y = y; d = d } () = List.map (fun v -> printf "%d, " v) d;;
+let displayVertex { x = x; y = y; d = d } () = printf "|x: %d, y: %d, d:" x y; displayDomain { x = x; y = y; d = d } ();;
+let displayVertexes () = G.iter_vertex (fun vt -> displayVertex (G.V.label vt) (); printf "\n";) g;;
+let printVertexesList l = List.map (fun v -> printf "|x: %d, y: %d, mark: %d, d: " (G.V.label v).x (G.V.label v).y (G.Mark.get v); displayDomain (G.V.label v) (); ();) l;;
+let displayEdge v () = G.iter_succ (fun v2 -> displayVertex (G.V.label v) (); printf " -- "; displayVertex (G.V.label v2) (); printf "\n";) g v;;
+let displayEdges () = G.iter_edges (fun v1 v2 -> displayVertex (G.V.label v1) (); printf " -- "; displayVertex (G.V.label v2) (); printf "\n";) g;;
+let displayDomains () =
+    for i = 0 to 8 do
+        for j = 0 to 8 do
+            printf "---- i: %d, j: %d ------\n" i j;
+            printf "["; 
+            displayDomain (G.V.label (node i j)) ();
+            printf "]\n";
+        done;
+    done
+;;    
+*)
 
 (*
  * Backtracking solver using MRV + degree heuristic + leastconstraingvalue + AC-3
- * @param remaining assigments to do
+ * @param list of remaining assigments to do
  *)
 let rec backtrack1 ltodo = 
 match ltodo with
@@ -165,32 +218,37 @@ match ltodo with
     | _ -> let h = selectVarStrategy ltodo in
         List.iter (fun value ->
             i := (!i + 1); (* test number *)
+            (*printf "\n i: %d" !i;*)
+            (*printf "\n Length ltodo %d" (List.length ltodo);*)
             if (not (invalid (G.V.label h).x (G.V.label h).y value)) then
                 (G.Mark.set h value;
-                backtrack1 (listRemoveElement h ltodo);
+                applyConstraints h ltodo;
+                backtrack1 (listRemoveElement h ltodo); (* backtrack *)
+                releaseConstraints h ltodo;
                 G.Mark.set h 0;
-        )) (orderDomainLeastConstraining h)
+        )) (orderDomainLeastConstraining h ltodo)
 ;;
 
 let solveFromStdin () =
     createFromStdin ();
-    initConstraints ();
+    initGraph ();
     applyInitConstraints ();
 ;;
+
+(* We solve the Sudoku by 9-coloring the graph *)
+module C = Coloring.Mark(G)
+
 let main () =    
     try
         solveFromStdin ();
         if (Array.length Sys.argv >= 2) then (
-            if (Sys.argv.(1) = "1") then (
-                printf "Backtrack with pick strategies:\n";
-                backtrack1 ((getUnassigned g) []))
-            else if (Sys.argv.(1) = "0") then (
-                printf "Simple Backtrack with Constraint domain reduction:\n";
-                backtrack0 ((getUnassigned g) [])))   
+            match Sys.argv.(1) with
+            | "0" -> printf "Simple Backtrack:\n"; backtrack0 ((getUnassigned g) []);
+            | "1" -> printf "Backtrack with MRV + DH + LCV + AC3 strategies:\n"; backtrack1 ((getUnassigned g) []);
+            | "2" -> printf "Graph coloring:\n"; C.coloring g 9; display ();
+            | _ -> printf "help :"
+        )
     with
     | Found -> display (); printf "\nDone in %d iter \n" (!i);
 ;;
 main ();; 
-
-
-
