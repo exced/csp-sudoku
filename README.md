@@ -11,6 +11,13 @@ To compile :
 make
 ```
 
+There are different backtrack strategies available :
+0. Simple : test all variables and all domains without ordering them.
+1. Minimum Remaining Values + Degree Heuristic strategy to choose the next variables and Least Constraining Values to order domain.
+2. strategy 2 + AC-3 arcs consistency : prevent failure
+
+You can also use Graph coloring solver with 'c'
+
 To run with your own sudoku :
 ```bash
 cat >mySudoku
@@ -24,7 +31,10 @@ cat >mySudoku
 200896001
 040030020
 
-./sudoku <mySudoku
+./sudoku 0 <mySudoku
+./sudoku 1 <mySudoku
+./sudoku 2 <mySudoku
+./sudoku c <mySudoku
 ```
 
 ## Use Docker to work with Ocaml and its graph dependency
