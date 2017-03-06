@@ -55,17 +55,6 @@ let nbValsIn v l =
     List.fold_right (fun vt q -> if (v == vt) then 1 + q else q) l 0
 ;;    
 
-(* remove assigned variables *)
-let removeAssigned l = List.filter (fun x -> (G.Mark.get x) = 0) l;;
-
-(* set the mark for the nodes which have singleton domain *)
-let markSingletons unassigned () = List.iter (fun vt ->
-    match (G.V.label vt).d with
-       | [a] -> G.Mark.set vt a;
-       | _ -> ()
-    ) unassigned
-;;
-
 (* apply constraints on successor nodes *)
 let applyConstraintsSucc n () = 
     G.iter_succ (fun vt -> 
@@ -79,23 +68,6 @@ let applyConstraintsSucc n () =
 ;;
 
 let applyInitConstraints () = G.iter_vertex (fun vt -> applyConstraintsSucc vt ();) g;
-;;
-
-(* apply constraints on listed nodes *)
-let applyConstraints n unassigned =
-    List.iter (fun vt ->
-    if (List.length (G.V.label vt).d >= 2) then
-        if ( (G.V.label n).x = (G.V.label vt).x || (G.V.label n).y = (G.V.label vt).y || ((G.V.label n).x/3*3 = (G.V.label vt).x/3*3 && (G.V.label n).y/3*3 = (G.V.label vt).y/3*3) ) then
-             (G.V.label vt).d <- listRemoveElement (G.Mark.get n) (G.V.label vt).d;
-    ) unassigned
-;;
-
-(* release constraints on listed nodes *)
-let releaseConstraints n unassigned =
-    List.iter (fun vt ->
-        if ( (G.V.label n).x = (G.V.label vt).x || (G.V.label n).y = (G.V.label vt).y || ((G.V.label n).x/3*3 = (G.V.label vt).x/3*3 && (G.V.label n).y/3*3 = (G.V.label vt).y/3*3) ) then
-            (G.V.label vt).d <- (G.V.label vt).d@[(G.Mark.get n)];
-    ) unassigned
 ;;
 
 (* We read the initial constraints from standard input *)
@@ -228,36 +200,8 @@ match unassigned with
         )) (orderDomainLeastConstraining h unassigned)
 ;;
 
-(* return all 2-uple of vertexes which are linked by an edge *)
-let get_all_arcs g =
-    G.fold_edges (fun v1 v2 qt -> (v1, v2)::qt) g [];;
-;;
-
-(* return all 2-uple of vertexes which are linked by an edge *)
-let get_neighbors_arcs v g =
-    G.fold_succ (fun v1 qt -> (v, v1)::qt) g v [];;
-;;
-
-let printIntList l = List.map (fun v -> printf "%d , " v;) l;;
-let displayDomain { x = x; y = y; d = d } () = List.map (fun v -> printf "%d, " v) d;;
-let displayVertex { x = x; y = y; d = d } () = printf "| x: %d, y: %d, d:" x y; displayDomain { x = x; y = y; d = d } ();;
-let displayVertexes () = G.iter_vertex (fun vt -> displayVertex (G.V.label vt) (); printf "\n";) g;;
-let printVertexesList l = List.map (fun v -> displayVertex (G.V.label v); printf "M: %d" (G.Mark.get  v); ();) l;;
-let displayEdge v () = G.iter_succ (fun v2 -> displayVertex (G.V.label v) (); printf " -- "; displayVertex (G.V.label v2) (); printf "\n";) g v;;
-let displayEdges () = G.iter_edges (fun v1 v2 -> displayVertex (G.V.label v1) (); printf " -- "; displayVertex (G.V.label v2) (); printf "\n";) g;;
-let displayDomains () =
-    for i = 0 to 8 do
-        for j = 0 to 8 do
-            printf "---- i: %d, j: %d ------\n" i j;
-            printf "["; 
-            displayDomain (G.V.label (node i j)) ();
-            printf "]\n";
-        done;
-    done
-;;     
-
-(* Arcs consistency *)
-let ac3 v g =
+(* Arcs consistency, work with a copy of the graph *)
+let ac3 v g () =
     let remove_inconsistent_values xi xj =
         let removed = ref false in
         List.iter (fun x ->
@@ -267,18 +211,18 @@ let ac3 v g =
         ) (G.V.label xi).d;
         !removed
     in
-    let rec aux queue = 
-        printf "\n queue";
-        match queue with
-        | [] -> raise Success;
-        | h::t -> let (xi, xj) = h in
+    (* fill the queue with neighbors of input vertex *)
+    let q = Queue.create () in
+    G.iter_succ (fun v1 -> Queue.add (v, v1) q) g v;
+
+    while (not (Queue.is_empty q)) do
+        let (xi, xj) = Queue.pop q in
             match (G.V.label xi).d with
             | [] -> raise Failure;
             | _ ->
             if (remove_inconsistent_values xi xj) then
-                let q = List.map (fun xk -> queue@[(xk, xi)]) (G.succ g xi)
-                in aux (List.flatten q)
-    in aux (get_neighbors_arcs v g)
+                List.iter (fun xk -> Queue.add (xk, xi) q;) (G.succ g xi);
+    done
 ;;   
 
 (*
@@ -287,26 +231,20 @@ let ac3 v g =
  * @param list of remaining assigments to do
  *)
 let rec backtrack2 g unassigned = 
-let gc = G.copy g in    
-let unassigned = ((getUnassigned gc) []) in
+let gc = G.copy g in 
 match unassigned with
     | [] -> raise Found; (* Found a solution *)
-    | _ -> let h = select gc unassigned in
+    | _ -> let h = select g unassigned in
+        let hc = select gc ((getUnassigned gc) []) in (* copy value and scope *)
         List.iter (fun value ->
             i := (!i + 1); (* iteration number *)
-            printf "\n value: %d" value;
-            printf "\n MARK: %d" (G.Mark.get h);
-            displayVertex (G.V.label h) ();
-            printVertexesList (G.succ gc h);
             if (not (invalid (G.V.label h).x (G.V.label h).y value)) then (
-                try ac3 h gc with 
-                | Success ->
-                    printf "\nsuccess";
+                try ac3 hc gc () with 
+                | Failure ->
+                    G.Mark.set h 0;
+                | _ ->                    
                     G.Mark.set h value;
                     backtrack1 g (listRemoveElement h unassigned); (* backtrack *)    
-                | Failure ->
-                    printf "\nfailure";
-                    G.Mark.set h 0;
         )) (orderDomainLeastConstraining h unassigned)
 ;;
 
